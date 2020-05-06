@@ -1,0 +1,63 @@
+1º Criar usuário no banco
+
+CREATE USER 'monitoradb'@'localhost' IDENTIFIED BY 'RK83iLt6';
+
+
+2º Acessar console do MySQL e dar acesso aos databases que serão monitorados
+
+GRANT USAGE ON *.* TO monitdb@localhost IDENTIFIED BY 'RK83iLt6' WITH GRANT OPTION;
+Ou
+GRANT USAGE ON otrs TO monitdb@localhost IDENTIFIED BY 'RK83iLt6' WITH GRANT OPTION;
+
+
+
+3º Criar arquivo de configuração 
+[mysql]
+user=monitdb
+password=RK83iLt6
+[mysqladmin]
+user=monitdb
+password=RK83iLt6
+
+
+4º userparameters_mysql.conf
+Baixar arquivo para o diretório
+/etc/zabbix/zabbix_agentd.conf.d/
+
+
+# Sintaxe: mysql.status[variavel] - ex.: mysql.status[Slow_queries]
+UserParameter=mysql.status[*],echo "show global status where Variable_name='$1';" | HOME=/etc/zabbix mysql -N | awk '{print $$2}'
+
+# Sintaxe: mysql.size[<database>,<tabela>,<tipo>]
+# Database eh o nome da base de dados. O Padrao eh "all".
+# Tabela eh o nome da tabela. O padrao eh "all". Se a tabela for especificada, o database eh obrigatorio.
+# Tipo pode ser "data", "index", "free" ou "both". Both eh a soma de "data" e "index". O padrao eh "both"
+UserParameter=mysql.size[*],bash -c 'echo "select sum($(case "$3" in both|"") echo "data_length+index_length";; data|index) echo "$3_length";; free) echo "data_free";; esac)) from information_schema.tables$([[ "$1" = "all" || ! "$1" ]] || echo " where table_schema=\"$1\"")$([[ "$2" = "all" || ! "$2" ]] || echo " and table_name=\"$2\"");" | HOME=/etc/zabbix mysql -N' 
+
+UserParameter=mysql.ping,HOME=/etc/zabbix mysqladmin ping | grep -c alive
+UserParameter=mysql.version,mysql -V
+
+
+5º Configurar zabbix_agentd.conf e Reinicie o serviço
+
+### Option: Include
+Include=/etc/zabbix/zabbix_agentd.conf.d/
+
+
+Testes com zabbix_get
+
+# zabbix_get -s 127.0.0.1 -k mysql.status[Com_insert]
+# zabbix_get -s 127.0.0.1 -k mysql.version
+# zabbix_get -s 127.0.0.1 -k mysql.ping
+# zabbix_get -s 127.0.0.1 -k mysql.size
+# zabbix_get -s 127.0.0.1 -k mysql.size[zabbix]
+# zabbix_get -s 127.0.0.1 -k mysql.size[zabbix,hosts]
+# zabbix_get -s 127.0.0.1 -k mysql.size[zabbix,history,index]
+# zabbix_get -s 127.0.0.1 -k mysql.size[zabbix,history,data]
+# zabbix_get -s 127.0.0.1 -k mysql.size[zabbix,,data]
+
+
+Template App MySQL
+
+- Associar o template ao host que executa o
+servidor MySQL
